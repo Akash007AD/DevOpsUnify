@@ -1,0 +1,11 @@
+# Jenkins Shared Library configuration
+# This file marks the root of the shared library for Jenkins
+# Library name: devopsunify-shared
+# Configure in: Manage Jenkins → System → Global Pipeline Libraries
+
+library:
+  name: devopsunify-shared
+  defaultVersion: main
+  implicit: false
+  allowVersionOverride: true
+  includeInChangesets: true

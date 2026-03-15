@@ -1,0 +1,184 @@
+version: "3.9"
+
+# =============================================================================
+# DevOpsUnify — Local Docker Compose Stack
+# Starts everything locally: backend, frontend, postgres, redis,
+# jenkins, sonarqube, prometheus, grafana
+#
+# Usage:
+#   docker compose up -d            # Start all services
+#   docker compose up -d backend    # Start only backend + deps
+#   docker compose logs -f backend  # Tail logs
+#   docker compose down -v          # Stop and remove volumes
+# =============================================================================
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       devopsunify
+      POSTGRES_USER:     devopsunify
+      POSTGRES_PASSWORD: devopsunify_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devopsunify"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  # ── Application ────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV:              development
+      PORT:                  3000
+      DB_HOST:               postgres
+      DB_PORT:               5432
+      DB_NAME:               devopsunify
+      DB_USER:               devopsunify
+      DB_PASS:               devopsunify_pass
+      REDIS_HOST:            redis
+      REDIS_PORT:            6379
+      JWT_SECRET:            74aa2bec49926c949f468d439dcf04b8a9d68757f63dc6623e7b532c8ed877f
+      GITHUB_CLIENT_ID:      Ov23ligpEdcN3CKzkonL
+      GITHUB_CLIENT_SECRET:  724a6702b25b833d07860ef22ce5bf1c11dc4492
+      GITHUB_WEBHOOK_SECRET: dc20181f6e39d33558cc186d13fe4b6a8c0f8b405a333c1384854e127cca6c811
+      JENKINS_URL:           http://jenkins:8080
+      JENKINS_USER:          admin
+      JENKINS_API_TOKEN:     ${JENKINS_API_TOKEN:-}
+      SONAR_URL:             http://sonarqube:9000
+      SONAR_TOKEN:           ${SONAR_TOKEN:-}
+      GRAFANA_URL:           http://grafana:3001
+      GRAFANA_API_KEY:       ${GRAFANA_API_KEY:-}
+      FRONTEND_URL:          http://localhost:5173
+      AWS_REGION:            ${AWS_REGION:-ap-south-1}
+      ECR_REGISTRY:          ${ECR_REGISTRY:-}
+    volumes:
+      - ./backend/src:/app/src        # hot reload in dev
+      - backend-logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # ── CI/CD ──────────────────────────────────────────────────────────────────
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    restart: unless-stopped
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+      JENKINS_OPTS: "--prefix=/jenkins"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/jenkins/login || exit 1"]
+      interval: 30s
+      start_period: 60s
+
+  # ── Code Quality ───────────────────────────────────────────────────────────
+  sonarqube:
+    image: sonarqube:10-community
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL:      jdbc:postgresql://postgres:5432/sonar
+      SONAR_JDBC_USERNAME: devopsunify
+      SONAR_JDBC_PASSWORD: devopsunify_pass
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-logs:/opt/sonarqube/logs
+      - sonar-extensions:/opt/sonarqube/extensions
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Monitoring ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: DevOpsUnify2024
+      GF_SERVER_HTTP_PORT:        3000
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/devopsunify.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  backend-logs:
+  jenkins-home:
+  sonar-data:
+  sonar-logs:
+  sonar-extensions:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  default:
+    name: devopsunify-network
