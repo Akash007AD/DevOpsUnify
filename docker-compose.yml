@@ -45,6 +45,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -62,9 +64,9 @@ services:
       GITHUB_CLIENT_ID:      Ov23ligpEdcN3CKzkonL
       GITHUB_CLIENT_SECRET:  724a6702b25b833d07860ef22ce5bf1c11dc4492
       GITHUB_WEBHOOK_SECRET: dc20181f6e39d33558cc186d13fe4b6a8c0f8b405a333c1384854e127cca6c811
-      JENKINS_URL:           http://jenkins:8080
-      JENKINS_USER:          admin
-      JENKINS_API_TOKEN:     ${JENKINS_API_TOKEN:-}
+      JENKINS_URL:           http://host.docker.internal:8080
+      JENKINS_USER:          Akash
+      JENKINS_API_TOKEN:     117076005d776a45714e3308bb057f836e
       SONAR_URL:             http://sonarqube:9000
       SONAR_TOKEN:           ${SONAR_TOKEN:-}
       GRAFANA_URL:           http://grafana:3001

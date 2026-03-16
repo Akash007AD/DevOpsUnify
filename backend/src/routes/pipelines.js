@@ -35,14 +35,14 @@ router.post('/projects', authenticate, async (req, res, next) => {
 
     // 2. Create project record
     const project = await Project.create({
-      userId:       req.user.id,
-      name:         projectName,
+      userId: req.user.id,
+      name: projectName,
       repoUrl,
       repoFullName,
       branch,
-      projectType:  analysis.projectType,
-      port:         analysis.port,
-      ecrRepo:      projectName,
+      projectType: analysis.projectType,
+      port: analysis.port,
+      ecrRepo: projectName,
       helmReleaseName: projectName,
       k8sNamespace: 'default',
       sonarProjectKey: projectName,
@@ -61,16 +61,17 @@ router.post('/projects', authenticate, async (req, res, next) => {
       branch,
       projectType: analysis.projectType,
       ecrRegistry: process.env.ECR_REGISTRY,
-      ecrRepo:     projectName,
-      awsRegion:   process.env.AWS_REGION,
+      ecrRepo: projectName,
+      awsRegion: process.env.AWS_REGION,
       sonarProjectKey: projectName,
       helmReleaseName: projectName,
       k8sNamespace: 'default',
       port: analysis.port,
     });
 
-    await jenkinsService.createJob(projectName, jenkinsfile);
-
+    await jenkinsService.createJob(projectName, jenkinsfile).catch(e =>
+      logger.warn(`Jenkins job creation failed (Jenkins not ready): ${e.message}`)
+    );
     // 5. Create Grafana dashboard
     const dash = await grafanaService.createDashboard(projectName, analysis.projectType).catch(e => {
       logger.warn(`Grafana dashboard creation failed: ${e.message}`);
@@ -105,7 +106,7 @@ router.post('/projects/:id/builds', authenticate, async (req, res, next) => {
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     const build = await Build.create({
-      projectId:   project.id,
+      projectId: project.id,
       triggeredBy: req.user.login,
       status: 'queued',
     });
@@ -148,17 +149,17 @@ router.get('/projects/:id/jenkinsfile', authenticate, async (req, res, next) => 
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     const jenkinsfile = jenkinsfileGenerator.generate({
-      projectName:    project.name,
-      repoUrl:        project.repoUrl,
-      branch:         project.branch,
-      projectType:    project.projectType,
-      ecrRegistry:    process.env.ECR_REGISTRY,
-      ecrRepo:        project.ecrRepo,
-      awsRegion:      process.env.AWS_REGION,
+      projectName: project.name,
+      repoUrl: project.repoUrl,
+      branch: project.branch,
+      projectType: project.projectType,
+      ecrRegistry: process.env.ECR_REGISTRY,
+      ecrRepo: project.ecrRepo,
+      awsRegion: process.env.AWS_REGION,
       sonarProjectKey: project.sonarProjectKey,
       helmReleaseName: project.helmReleaseName,
-      k8sNamespace:   project.k8sNamespace,
-      port:           project.port,
+      k8sNamespace: project.k8sNamespace,
+      port: project.port,
     });
 
     res.json({ jenkinsfile });
@@ -173,7 +174,7 @@ async function _trackBuild(build, project, queueUrl) {
     emitBuildStatus(build.id, 'running');
 
     let logStart = 0;
-    let running  = true;
+    let running = true;
 
     while (running) {
       await new Promise(r => setTimeout(r, 3000));
