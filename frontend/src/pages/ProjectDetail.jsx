@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
-import { ArrowPathIcon, PlayIcon, CodeBracketIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, PlayIcon, CodeBracketIcon, ChartBarIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { formatDistanceToNow } from 'date-fns';
 
 const STATUS_BADGE = {
@@ -14,12 +14,14 @@ const STATUS_BADGE = {
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const [project, setProject]       = useState(null);
-  const [builds, setBuilds]         = useState([]);
+  const [project, setProject]         = useState(null);
+  const [builds, setBuilds]           = useState([]);
   const [jenkinsfile, setJenkinsfile] = useState('');
-  const [tab, setTab]               = useState('builds');
-  const [triggering, setTriggering] = useState(false);
-  const [loading, setLoading]       = useState(true);
+  const [tab, setTab]                 = useState('builds');
+  const [triggering, setTriggering]   = useState(false);
+  const [syncing, setSyncing]         = useState(false);
+  const [syncMsg, setSyncMsg]         = useState('');
+  const [loading, setLoading]         = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -47,6 +49,19 @@ export default function ProjectDetail() {
     }
   }
 
+  async function syncJenkins() {
+    setSyncing(true);
+    setSyncMsg('');
+    try {
+      const { data } = await api.post(`/pipelines/projects/${id}/sync-jenkins`);
+      setSyncMsg(data.message);
+    } catch (e) {
+      setSyncMsg(e.response?.data?.error || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (loading) return <div className="text-gray-500 text-sm">Loading…</div>;
   if (!project) return <div className="text-red-400">Project not found</div>;
 
@@ -64,13 +79,17 @@ export default function ProjectDetail() {
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{project.repoFullName} · {project.branch} · {project.projectType}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {project.grafanaDashboardUid && (
             <a href={`${import.meta.env.VITE_GRAFANA_URL || ''}/d/${project.grafanaDashboardUid}`}
               target="_blank" rel="noopener noreferrer" className="btn-secondary">
               <ChartBarIcon className="w-4 h-4" /> Grafana
             </a>
           )}
+          <button className="btn-secondary" onClick={syncJenkins} disabled={syncing} title="Push Jenkinsfile to Jenkins">
+            {syncing ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <ArrowUpTrayIcon className="w-4 h-4" />}
+            {syncing ? 'Syncing…' : 'Sync Jenkins'}
+          </button>
           <button className="btn-primary" onClick={triggerBuild} disabled={triggering}>
             {triggering ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
             {triggering ? 'Triggering…' : 'Run Build'}
@@ -78,12 +97,23 @@ export default function ProjectDetail() {
         </div>
       </div>
 
+      {/* Sync feedback */}
+      {syncMsg && (
+        <div className={`text-sm px-4 py-2 rounded-lg ${
+          syncMsg.toLowerCase().includes('success') || syncMsg.includes('created') || syncMsg.includes('updated')
+            ? 'bg-green-900/20 text-green-400 border border-green-800'
+            : 'bg-red-900/20 text-red-400 border border-red-800'
+        }`}>
+          {syncMsg}
+        </div>
+      )}
+
       {/* Info cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'ECR Repo',   value: project.ecrRepo || '–' },
-          { label: 'Namespace',  value: project.k8sNamespace },
-          { label: 'Port',       value: project.port },
+          { label: 'ECR Repo',     value: project.ecrRepo || '–' },
+          { label: 'Namespace',    value: project.k8sNamespace },
+          { label: 'Port',         value: project.port },
           { label: 'Helm Release', value: project.helmReleaseName || '–' },
         ].map(({ label, value }) => (
           <div key={label} className="card py-3">
@@ -96,7 +126,7 @@ export default function ProjectDetail() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-800 pb-0">
         {[
-          { key: 'builds',     label: `Builds (${builds.length})` },
+          { key: 'builds',      label: `Builds (${builds.length})` },
           { key: 'jenkinsfile', label: 'Jenkinsfile' },
         ].map(t => (
           <button
@@ -117,7 +147,7 @@ export default function ProjectDetail() {
       {tab === 'builds' && (
         <div className="space-y-2">
           {builds.length === 0 ? (
-            <p className="text-gray-500 text-sm">No builds yet. Click "Run Build" or push to your repo.</p>
+            <p className="text-gray-500 text-sm">No builds yet. Click "Sync Jenkins" first, then "Run Build" or push to your repo.</p>
           ) : builds.map(b => (
             <Link key={b.id} to={`/projects/${id}/builds/${b.id}`}
               className="card hover:border-gray-700 transition-colors flex items-center gap-4">

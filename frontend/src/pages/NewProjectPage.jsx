@@ -72,7 +72,17 @@ export default function NewProjectPage() {
       });
       navigate(`/projects/${data.project.id}`);
     } catch (e) {
-      setError(e.response?.data?.error || 'Project creation failed');
+      if (e.response?.status === 409) {
+        // Already exists — navigate to the existing project
+        const existingId = e.response.data?.projectId;
+        if (existingId) {
+          navigate(`/projects/${existingId}`);
+        } else {
+          setError('A project for this repository and branch already exists.');
+        }
+      } else {
+        setError(e.response?.data?.error || 'Project creation failed');
+      }
       setCreating(false);
     }
   }

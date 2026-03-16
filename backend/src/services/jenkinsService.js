@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
 
-const JENKINS_URL   = () => process.env.JENKINS_URL;
+const JENKINS_URL   = () => (process.env.JENKINS_URL || '').replace(/\/$/, '');
 const JENKINS_USER  = () => process.env.JENKINS_USER;
 const JENKINS_TOKEN = () => process.env.JENKINS_API_TOKEN;
 
@@ -12,10 +12,14 @@ function auth() {
   return { username: JENKINS_USER(), password: JENKINS_TOKEN() };
 }
 
+function apiUrl(p) {
+  return `${JENKINS_URL()}${p}`;
+}
+
 class JenkinsService {
   // ── Crumb (CSRF token) ────────────────────────────────────────────────────
   async _getCrumb() {
-    const res = await axios.get(`${JENKINS_URL()}/crumbIssuer/api/json`, { auth: auth() });
+    const res = await axios.get(apiUrl('/crumbIssuer/api/json'), { auth: auth() });
     return { [res.data.crumbRequestField]: res.data.crumb };
   }
 
@@ -26,18 +30,16 @@ class JenkinsService {
     const headers = { 'Content-Type': 'application/xml', ...crumb };
 
     try {
-      // Try to create
       await axios.post(
-        `${JENKINS_URL()}/createItem?name=${encodeURIComponent(jobName)}`,
+        apiUrl(`/createItem?name=${encodeURIComponent(jobName)}`),
         configXml,
         { auth: auth(), headers }
       );
       logger.info(`Jenkins job created: ${jobName}`);
     } catch (err) {
       if (err.response?.status === 400) {
-        // Job exists — update it
         await axios.post(
-          `${JENKINS_URL()}/job/${encodeURIComponent(jobName)}/config.xml`,
+          apiUrl(`/job/${encodeURIComponent(jobName)}/config.xml`),
           configXml,
           { auth: auth(), headers }
         );
@@ -53,8 +55,8 @@ class JenkinsService {
     const crumb = await this._getCrumb();
     const hasParams = Object.keys(params).length > 0;
     const url = hasParams
-      ? `${JENKINS_URL()}/job/${encodeURIComponent(jobName)}/buildWithParameters`
-      : `${JENKINS_URL()}/job/${encodeURIComponent(jobName)}/build`;
+      ? apiUrl(`/job/${encodeURIComponent(jobName)}/buildWithParameters`)
+      : apiUrl(`/job/${encodeURIComponent(jobName)}/build`);
 
     const res = await axios.post(url, null, {
       auth: auth(),
@@ -62,7 +64,6 @@ class JenkinsService {
       params: hasParams ? params : undefined,
     });
 
-    // Jenkins returns Location header with queue item URL
     const queueUrl = res.headers['location'];
     return { queueUrl };
   }
@@ -83,12 +84,12 @@ class JenkinsService {
   // ── Get build status ───────────────────────────────────────────────────────
   async getBuildStatus(jobName, buildNumber) {
     const res = await axios.get(
-      `${JENKINS_URL()}/job/${encodeURIComponent(jobName)}/${buildNumber}/api/json`,
+      apiUrl(`/job/${encodeURIComponent(jobName)}/${buildNumber}/api/json`),
       { auth: auth() }
     );
     return {
       building: res.data.building,
-      result: res.data.result,     // SUCCESS | FAILURE | ABORTED | null (still building)
+      result: res.data.result,
       duration: res.data.duration,
       url: res.data.url,
     };
@@ -97,7 +98,7 @@ class JenkinsService {
   // ── Stream console log ─────────────────────────────────────────────────────
   async getConsoleLog(jobName, buildNumber, start = 0) {
     const res = await axios.get(
-      `${JENKINS_URL()}/job/${encodeURIComponent(jobName)}/${buildNumber}/logText/progressiveText`,
+      apiUrl(`/job/${encodeURIComponent(jobName)}/${buildNumber}/logText/progressiveText`),
       {
         auth: auth(),
         params: { start },
@@ -113,7 +114,6 @@ class JenkinsService {
 
   // ── Set up GitHub webhook on job ───────────────────────────────────────────
   async configureGithubTrigger(jobName, secret) {
-    // Handled in the job config XML — this method updates it
     logger.info(`GitHub trigger configured for ${jobName}`);
   }
 

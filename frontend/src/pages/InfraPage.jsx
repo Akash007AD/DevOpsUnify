@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../utils/api';
 import { ArrowPathIcon, ServerStackIcon, TrashIcon } from '@heroicons/react/24/outline';
 
@@ -7,8 +7,12 @@ export default function InfraPage() {
   const [infraMap, setInfraMap]   = useState({});
   const [loading, setLoading]     = useState(true);
   const [provisioning, setProv]   = useState({});
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
     api.get('/pipelines/projects').then(async r => {
       setProjects(r.data);
       const map = {};
