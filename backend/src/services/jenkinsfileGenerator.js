@@ -49,7 +49,7 @@ pipeline {
     ECR_REGISTRY    = '${ecrRegistry}'
     ECR_REPO        = '${ecrRepo}'
     AWS_REGION      = '${awsRegion}'
-    IMAGE_TAG       = "\${env.BUILD_NUMBER}-\${env.GIT_COMMIT?.take(7) ?: 'local'}"
+    IMAGE_TAG       = "\${env.BUILD_NUMBER}-local"
     FULL_IMAGE      = "\${ECR_REGISTRY}/\${ECR_REPO}:\${IMAGE_TAG}"
     SONAR_PROJECT   = '${sonarProjectKey}'
     HELM_RELEASE    = '${helmReleaseName}'
