@@ -51,7 +51,7 @@ services:
       GITHUB_CLIENT_SECRET:  724a6702b25b833d07860ef22ce5bf1c11dc4492
       GITHUB_CALLBACK_URL:   http://localhost:3000/api/auth/github/callback
       GITHUB_WEBHOOK_SECRET: dc20181f6e39d33558cc186d13fe4b6a8c0f8b405a333c1384854e127cca6c811
-      JENKINS_URL:           http://host.docker.internal:8080
+      JENKINS_URL:           http://172.18.0.1:8080
       JENKINS_USER:          Akash
       JENKINS_API_TOKEN:     117076005d776a45714e3308bb057f836e
       BACKEND_URL:           http://host.docker.internal:3000
